@@ -11,6 +11,7 @@ import (
 func main() {
 	n := maelstrom.NewNode()
 	serv := &server{n: n, seen_set: make(map[int]struct{})}
+	serv.topology_cond = sync.NewCond(&serv.topology_mutex)
 	n.Handle("broadcast", serv.receive_broadcast)
 	n.Handle("read", serv.read_broadcast)
 	n.Handle("topology", serv.receive_topology)
@@ -24,8 +25,15 @@ type server struct {
 	n        *maelstrom.Node
 	seen_set map[int]struct{}
 	seen_mutex  sync.Mutex
-	topology map[string]map[string]struct{}
+	topology_mutex sync.Mutex
+	topology_cond  *sync.Cond
+	topology map[string]map[string][]int
 }
+
+// func (s *server) send_newly_seen() error {
+// 	s.topology_mutex.Lock()
+// 	for 
+// }
 
 func (s *server) receive_broadcast(msg maelstrom.Message) error {
 	var body map[string]interface{}
@@ -82,11 +90,11 @@ func (s *server) receive_topology(msg maelstrom.Message) error {
 	if err := json.Unmarshal(msg.Body, &body); err != nil {
 		return err
 	}
-	s.topology = make(map[string]map[string]struct{})
+	s.topology = make(map[string]map[string][]int)
 	for k, v := range body["topology"].(map[string]interface{}) {
-		s.topology[k] = make(map[string]struct{})
+		s.topology[k] = make(map[string][]int)
 		for _, peer := range v.([]interface{}) {
-			s.topology[k][peer.(string)] = struct{}{}
+			s.topology[k][peer.(string)] = make([]int, 0) 
 		}
 	}
 	delete(body, "topology")

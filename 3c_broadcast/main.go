@@ -27,12 +27,29 @@ type server struct {
 	seen_mutex  sync.Mutex
 	topology_mutex sync.Mutex
 	topology_cond  *sync.Cond
-	topology map[string]map[string][]int
+	topology map[string][]int
 }
 
-// func (s *server) send_newly_seen() error {
-// 	s.topology_mutex.Lock()
-// 	for 
+// Check it this node has anything to send
+// func (s *server) remaining_empty() bool {
+// 	for _, v1 := range s.topology[n.s.ID()] {
+// 		if len(v1) != 0 {
+// 			return false
+// 		}
+// 	}
+// 	return true
+// }
+
+// func (s *server) broadcast_worker() error {
+// 	for true {
+// 		s.topology_mutex.Lock()
+// 		s.topology_cond.Wait()
+// 		if s.remaining_empty() {
+// 			s.topology_mutex.Unlock()
+// 			continue
+// 		}
+// 		for peer := range s.topology[s.n.ID()] {
+// 	}
 // }
 
 func (s *server) receive_broadcast(msg maelstrom.Message) error {
@@ -54,7 +71,7 @@ func (s *server) receive_broadcast(msg maelstrom.Message) error {
 		if err != nil {
 			return err
 		}
-		for peer := range s.topology[s.n.ID()] {
+		for peer := range s.topology {
 			s.n.Send(peer, json.RawMessage(msg_body_byte))
 		}
 	}
@@ -90,11 +107,13 @@ func (s *server) receive_topology(msg maelstrom.Message) error {
 	if err := json.Unmarshal(msg.Body, &body); err != nil {
 		return err
 	}
-	s.topology = make(map[string]map[string][]int)
+	s.topology = make(map[string][]int)
 	for k, v := range body["topology"].(map[string]interface{}) {
-		s.topology[k] = make(map[string][]int)
-		for _, peer := range v.([]interface{}) {
-			s.topology[k][peer.(string)] = make([]int, 0) 
+		// If the key is this node, add all the neighbors to the topology map, along with an empty list as their value
+		if k == s.n.ID() {
+			for _, neighbor := range v.([]interface{}) {
+				s.topology[neighbor.(string)] = make([]int, 0)
+			}
 		}
 	}
 	delete(body, "topology")

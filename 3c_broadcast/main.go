@@ -11,7 +11,6 @@ import (
 func main() {
 	n := maelstrom.NewNode()
 	serv := &server{n: n, seen_set: make(map[int]struct{})}
-	serv.topology_cond = sync.NewCond(&serv.topology_mutex)
 	n.Handle("broadcast", serv.receive_broadcast)
 	n.Handle("read", serv.read_broadcast)
 	n.Handle("topology", serv.receive_topology)
@@ -25,32 +24,8 @@ type server struct {
 	n        *maelstrom.Node
 	seen_set map[int]struct{}
 	seen_mutex  sync.Mutex
-	topology_mutex sync.Mutex
-	topology_cond  *sync.Cond
-	topology map[string][]int
+	neighbors map[string]map[int]struct{}
 }
-
-// Check it this node has anything to send
-// func (s *server) remaining_empty() bool {
-// 	for _, v1 := range s.topology[n.s.ID()] {
-// 		if len(v1) != 0 {
-// 			return false
-// 		}
-// 	}
-// 	return true
-// }
-
-// func (s *server) broadcast_worker() error {
-// 	for true {
-// 		s.topology_mutex.Lock()
-// 		s.topology_cond.Wait()
-// 		if s.remaining_empty() {
-// 			s.topology_mutex.Unlock()
-// 			continue
-// 		}
-// 		for peer := range s.topology[s.n.ID()] {
-// 	}
-// }
 
 func (s *server) receive_broadcast(msg maelstrom.Message) error {
 	var body map[string]interface{}
@@ -71,8 +46,15 @@ func (s *server) receive_broadcast(msg maelstrom.Message) error {
 		if err != nil {
 			return err
 		}
-		for peer := range s.topology {
-			s.n.Send(peer, json.RawMessage(msg_body_byte))
+		for peer := range s.neighbors {
+			var retrySend func (msg maelstrom.Message) error
+			retrySend = func (msg maelstrom.Message) error {
+				if msg.RPCError() != nil {
+					return s.n.RPC(peer, json.RawMessage(msg_body_byte), retrySend)
+				}
+				return nil
+			}
+			s.n.RPC(peer, json.RawMessage(msg_body_byte), retrySend)
 		}
 	}
 	s.seen_mutex.Unlock()
@@ -107,12 +89,12 @@ func (s *server) receive_topology(msg maelstrom.Message) error {
 	if err := json.Unmarshal(msg.Body, &body); err != nil {
 		return err
 	}
-	s.topology = make(map[string][]int)
+	s.neighbors = make(map[string]map[int]struct{})
 	for k, v := range body["topology"].(map[string]interface{}) {
 		// If the key is this node, add all the neighbors to the topology map, along with an empty list as their value
 		if k == s.n.ID() {
 			for _, neighbor := range v.([]interface{}) {
-				s.topology[neighbor.(string)] = make([]int, 0)
+				s.neighbors[neighbor.(string)] = make(map[int]struct{})
 			}
 		}
 	}

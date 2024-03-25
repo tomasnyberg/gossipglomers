@@ -46,6 +46,7 @@ func (s *server) receive_broadcast(msg maelstrom.Message) error {
 		msg_body := map[string]interface{}{
 			"message": received_int,
 			"type": "broadcast",
+			"node_generated": true,
 		}
 		msg_body_byte, err := json.Marshal(msg_body)
 		if err != nil {
@@ -56,6 +57,10 @@ func (s *server) receive_broadcast(msg maelstrom.Message) error {
 		for peer := range s.topology[s.n.ID()] {
 			s.n.Send(peer, json.RawMessage(msg_body_byte))
 		}
+	}
+	// Check if "node_generated" exists in the message body
+	if _, ok := body["node_generated"]; ok {
+		return nil
 	}
 	delete(body, "message")
 	body["type"] = "broadcast_ok"

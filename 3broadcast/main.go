@@ -2,17 +2,13 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
-	"math/rand"
-	"time"
 
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
 
 func main() {
 	n := maelstrom.NewNode()
-	rand.Seed(time.Now().UnixNano())
 	serv := &server{n: n, seen: make([]int, 0, 100)}
 	n.Handle("broadcast", serv.receive_broadcast)
 	n.Handle("read", serv.read_broadcast)
@@ -33,11 +29,7 @@ func (s *server) receive_broadcast(msg maelstrom.Message) error {
 	if err := json.Unmarshal(msg.Body, &body); err != nil {
 		return err
 	}
-	num, ok := body["message"].(float64)
-	if !ok {
-		return fmt.Errorf("message is not an int, what we got was %v", body["message"])
-	}
-	s.seen = append(s.seen, int(num))
+	s.seen = append(s.seen, int(body["message"].(float64)))
 	delete(body, "message")
 	body["type"] = "broadcast_ok"
 	return s.n.Reply(msg, body)

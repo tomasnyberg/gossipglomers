@@ -46,15 +46,16 @@ func (s *server) receive_broadcast(msg maelstrom.Message) error {
 		if err != nil {
 			return err
 		}
+		var msg_body_jsonned = json.RawMessage(msg_body_byte)
 		for peer := range s.neighbors {
 			var retrySend func (msg maelstrom.Message) error
 			retrySend = func (msg maelstrom.Message) error {
 				if msg.RPCError() != nil {
-					return s.n.RPC(peer, json.RawMessage(msg_body_byte), retrySend)
+					return s.n.RPC(peer, msg_body_jsonned, retrySend)
 				}
 				return nil
 			}
-			s.n.RPC(peer, json.RawMessage(msg_body_byte), retrySend)
+			s.n.RPC(peer, msg_body_jsonned, retrySend)
 		}
 	}
 	s.seen_mutex.Unlock()

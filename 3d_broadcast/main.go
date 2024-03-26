@@ -16,6 +16,7 @@ func main() {
 	n.Handle("broadcast", serv.receive_broadcast)
 	n.Handle("read", serv.read_broadcast)
 	n.Handle("topology", serv.receive_topology)
+	n.Handle("multi_broadcast", serv.receive_multi_broadcast)
 
 	if err := n.Run(); err != nil {
 		log.Fatal(err)
@@ -56,8 +57,13 @@ func initBroadcast(n *maelstrom.Node, count int, s *server) broadcaster {
 							var success bool = false
 							s.neighbors[nbr].neighbor_mutex.Lock()
 							defer s.neighbors[nbr].neighbor_mutex.Unlock()
+							// Save s.neighbors[nbr].to_send to a []int instead of a map
+							var messages []int = make([]int, 0)
+							for value := range s.neighbors[nbr].to_send {
+								messages = append(messages, value)
+							}
 							message_body := map[string]interface{}{
-								"message": s.neighbors[nbr].to_send,
+								"message": messages,
 								"type":    "multi_broadcast",
 							}
 							message_body_byte, err := json.Marshal(message_body)
@@ -93,9 +99,20 @@ func initBroadcast(n *maelstrom.Node, count int, s *server) broadcaster {
 	return broadcaster{ch, s}
 }
 
-// func (s *server) receive_multi_broadcast(msg maelstrom.Message) error {
-	
-// }
+func (s *server) receive_multi_broadcast(msg maelstrom.Message) error {
+	var body map[string]interface{}
+	if err := json.Unmarshal(msg.Body, &body); err != nil {
+		return err
+	}
+	var messages []int = make([]int, 0)
+	for _, message := range body["message"].([]interface{}) {
+		messages = append(messages, int(message.(float64)))
+	}
+	s.handle_new_messages(messages)
+	delete(body, "message")
+	body["type"] = "broadcast_ok"
+	return s.n.Reply(msg, body)
+}
 
 func (s *server) handle_new_messages(messages[] int){
 	s.seen_mutex.Lock()

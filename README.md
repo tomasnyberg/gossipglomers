@@ -59,4 +59,9 @@ While this approach solves the problem, allowing nodes to propagate even with a 
                  :msg-count 23549,
                  :msgs-per-op 117.1592},
 ```
-which is to say, we send more than `100` messages around the network for every new message that enters it (not great). Performance was of fairly small concern here, but that will change in the upcoming challenge(s).
+which is to say, we send more than `100` messages around the network for every new message that enters it (not great). Performance was of fairly small concern here, but that will change in the upcoming challenge(s). There is also this issue:
+```edn
+:stable-count 91,
+:stale-count 79,
+```
+what this means is that, while all our value were stable, stale behaviour was observed in 79 (almost all) of them. This suggests that, while the values are being propagated correctly, they do so very slowly.

@@ -10,7 +10,7 @@ import (
 
 func main() {
 	n := maelstrom.NewNode()
-	serv := &server{n: n, seen_set: make(map[int]struct{})}
+	serv := &server{n: n, seen_set: make(map[int]struct{}), broadcast_worker: initBroadcast(n, 10)}
 	n.Handle("broadcast", serv.receive_broadcast)
 	n.Handle("read", serv.read_broadcast)
 	n.Handle("topology", serv.receive_topology)
@@ -20,11 +20,42 @@ func main() {
 	}
 }
 
+type broadcastMsg struct {
+	peer string
+	body []byte
+}
+
+type broadcaster struct {
+	ch    chan broadcastMsg
+}
+
 type server struct {
 	n        *maelstrom.Node
 	seen_set map[int]struct{}
 	seen_mutex  sync.Mutex
 	neighbors map[string]map[int]struct{}
+	broadcast_worker broadcaster
+}
+
+func initBroadcast(n *maelstrom.Node, count int) broadcaster {
+	ch := make(chan broadcastMsg)
+	for i := 0; i < count; i++ {
+		go func() {
+			for {
+				select {
+					case msg := <-ch:
+						var body = json.RawMessage(msg.body)
+						for {
+							if err := n.Send(msg.peer, body); err != nil {
+								continue
+							}
+							break
+						}
+				}
+			}
+		}()
+	}
+	return broadcaster{ch}
 }
 
 func (s *server) receive_broadcast(msg maelstrom.Message) error {
@@ -46,16 +77,9 @@ func (s *server) receive_broadcast(msg maelstrom.Message) error {
 		if err != nil {
 			return err
 		}
-		var msg_body_jsonned = json.RawMessage(msg_body_byte)
 		for peer := range s.neighbors {
-			var retrySend func (msg maelstrom.Message) error
-			retrySend = func (msg maelstrom.Message) error {
-				if msg.RPCError() != nil {
-					return s.n.RPC(peer, msg_body_jsonned, retrySend)
-				}
-				return nil
-			}
-			s.n.RPC(peer, msg_body_jsonned, retrySend)
+			var msg broadcastMsg = broadcastMsg{peer, msg_body_byte}
+			s.broadcast_worker.ch <- msg
 		}
 	}
 	s.seen_mutex.Unlock()

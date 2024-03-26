@@ -11,7 +11,8 @@ import (
 
 func main() {
 	n := maelstrom.NewNode()
-	serv := &server{n: n, seen_set: make(map[int]struct{}), broadcast_worker: initBroadcast(n, 15)}
+	serv := &server{n: n, seen_set: make(map[int]struct{})}
+	serv.broadcast_worker = initBroadcast(n, 10, serv)
 	n.Handle("broadcast", serv.receive_broadcast)
 	n.Handle("read", serv.read_broadcast)
 	n.Handle("topology", serv.receive_topology)
@@ -27,11 +28,12 @@ type broadcastMsg struct {
 }
 
 type broadcaster struct {
-	ch chan broadcastMsg
+	ch chan string
+	server *server
 }
 
 type neighbor struct {
-	neighbor_mutex sync.Mutex
+	neighbor_mutex *sync.Mutex
 	to_send   map[int]struct{} // values we need to send to our neighbor
 }
 
@@ -43,41 +45,76 @@ type server struct {
 	broadcast_worker broadcaster
 }
 
-func initBroadcast(n *maelstrom.Node, count int) broadcaster {
-	ch := make(chan broadcastMsg)
+func initBroadcast(n *maelstrom.Node, count int, s *server) broadcaster {
+	ch := make(chan string)
 	for i := 0; i < count; i++ {
 		go func() {
 			for {
 				select {
-				case msg := <-ch:
-					go func() {
-						var body = json.RawMessage(msg.body)
-						var success bool = false
-						if err := n.RPC(msg.peer, body, func(response_msg maelstrom.Message) error {
-							var response_body map[string]interface{}
-							if err := json.Unmarshal(response_msg.Body, &response_body); err != nil {
-								return err
+					case nbr := <-ch:
+						go func() {
+							var success bool = false
+							s.neighbors[nbr].neighbor_mutex.Lock()
+							defer s.neighbors[nbr].neighbor_mutex.Unlock()
+							message_body := map[string]interface{}{
+								"message": s.neighbors[nbr].to_send,
+								"type":    "multi_broadcast",
 							}
-							if response_body["type"].(string) == "broadcast_ok" {
-								success = true
-							} else {
-								ch <- msg
+							message_body_byte, err := json.Marshal(message_body)
+							if err != nil {
+								log.Fatal(err)
 							}
-							return nil
-						}); err != nil {
-							ch <- msg
-							return
-						}
-						time.Sleep(250 * time.Millisecond)
-						if !success {
-							ch <- msg
-						}
-					}()
-				}
+							message_body_raw := json.RawMessage(message_body_byte)
+							if err := n.RPC(nbr, message_body_raw, func(response_msg maelstrom.Message) error {
+								var response_body map[string]interface{}
+								if err := json.Unmarshal(response_msg.Body, &response_body); err != nil {
+									return err
+								}
+								if response_body["type"].(string) == "broadcast_ok" {
+									success = true
+									// Remove the messages we sent from the to_send list
+									for value := range s.neighbors[nbr].to_send {
+										delete(s.neighbors[nbr].to_send, value)
+									}
+								}
+								return nil
+							}); err != nil {
+								ch <- nbr
+							}
+							time.Sleep(250 * time.Millisecond)
+							if !success {
+								ch <- nbr
+							}
+						}()
+					}
 			}
 		}()
 	}
-	return broadcaster{ch}
+	return broadcaster{ch, s}
+}
+
+// func (s *server) receive_multi_broadcast(msg maelstrom.Message) error {
+	
+// }
+
+func (s *server) handle_new_messages(messages[] int){
+	s.seen_mutex.Lock()
+	var to_send []int = make([]int, 0)
+	for _ , message := range messages {
+		if _, ok := s.seen_set[message]; !ok {
+			s.seen_set[message] = struct{}{}
+			to_send = append(to_send, message)
+		}
+	}
+	s.seen_mutex.Unlock()
+	for peer := range s.neighbors {
+		s.neighbors[peer].neighbor_mutex.Lock()
+		for _, message := range to_send {
+			s.neighbors[peer].to_send[message] = struct{}{}
+		}
+		s.broadcast_worker.ch <- peer
+		s.neighbors[peer].neighbor_mutex.Unlock()
+	}
 }
 
 func (s *server) receive_broadcast(msg maelstrom.Message) error {
@@ -86,25 +123,9 @@ func (s *server) receive_broadcast(msg maelstrom.Message) error {
 		return err
 	}
 	var received_int int = int(body["message"].(float64))
-	s.seen_mutex.Lock()
-	// If we have not seen the message before, keep track of it and broadcast it to all peers.
-	if _, ok := s.seen_set[received_int]; !ok {
-		s.seen_set[received_int] = struct{}{}
-		msg_body := map[string]interface{}{
-			"message":        received_int,
-			"type":           "broadcast",
-			"node_generated": true,
-		}
-		msg_body_byte, err := json.Marshal(msg_body)
-		if err != nil {
-			return err
-		}
-		for peer := range s.neighbors {
-			var msg broadcastMsg = broadcastMsg{peer, msg_body_byte}
-			s.broadcast_worker.ch <- msg
-		}
-	}
-	s.seen_mutex.Unlock()
+	// create an int array of just the received int
+	var messages []int = []int{received_int}
+	s.handle_new_messages(messages)
 	delete(body, "message")
 	body["type"] = "broadcast_ok"
 	return s.n.Reply(msg, body)
@@ -137,7 +158,7 @@ func (s *server) receive_topology(msg maelstrom.Message) error {
 		// If the key is this node, add all the neighbors to the topology map, along with an empty list as their value
 		if k == s.n.ID() {
 			for _, nbr := range v.([]interface{}) {
-				s.neighbors[nbr.(string)] = neighbor{to_send: make(map[int]struct{})}
+				s.neighbors[nbr.(string)] = neighbor{to_send: make(map[int]struct{}), neighbor_mutex: &sync.Mutex{}}
 			}
 		}
 	}

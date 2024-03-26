@@ -31,3 +31,32 @@ We can do this by simply checking if we have seen an integer when it arrives, an
  Given the frequent occurrence of the operation "have I seen this integer?" I opted for a set in each node as opposed to the simple list I was previously using. 
 However, because n.Handle fires off a goroutine for each incoming request, this led to some issues with concurrent access to said set. 
 A simple mutex was thus required, after which my nodes could happily share and receive integers without worrying about concurrent access. 
+
+### 3c: Fault-Tolerant Broadcast
+Now, network paritions are introduced, meaning nodes occasionally cannot send messages to each other.
+
+#### Solution
+Our previous approach will not work under this condition since we cannot assume that a node actually receives a sent message.
+ Some form of retrying and resending messages is now required.
+  For that purpose, I introduced a `broadcaster`, whose job is simply to manage a few (I went with 10) goroutines that look at which messages need to be processed, and send them off using the `RPC` call.
+   The tasks for a single goroutine looks something like this:
+```
+0: Wait for a message that needs to be sent
+1: Take a message that needs to be sent off the channel in the broadcaster
+2: Spin up another goroutine that sends the message and waits for it to arrive.
+3: If the message was not acknowledged by the receiving node within 250ms, place it back into the channel so we can retry.
+4: GOTO 0
+```
+While this approach solves the problem, allowing nodes to propagate even with a faulty network, it remains very inefficient. Inspecting the `results.edn` file, we see the following:
+```edn 
+ :net {:all {:send-count 23971,
+             :recv-count 2502,
+             :msg-count 23971,
+             :msgs-per-op 119.258705},
+       :clients {:send-count 422, :recv-count 422, :msg-count 422},
+       :servers {:send-count 23549,
+                 :recv-count 2080,
+                 :msg-count 23549,
+                 :msgs-per-op 117.1592},
+```
+which is to say, we send more than `100` messages around the network for every new message that enters it (not great). Performance was of fairly small concern here, but that will change in the upcoming challenge(s).

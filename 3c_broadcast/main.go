@@ -77,7 +77,10 @@ func (s *server) receive_broadcast(msg maelstrom.Message) error {
 		if err != nil {
 			return err
 		}
-		for peer := range s.neighbors {
+		for _, peer := range s.n.NodeIDs() {
+			if peer == s.n.ID() {
+				continue
+			}
 			var msg broadcastMsg = broadcastMsg{peer, msg_body_byte}
 			s.broadcast_worker.ch <- msg
 		}

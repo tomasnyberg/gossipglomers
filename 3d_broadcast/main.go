@@ -79,6 +79,8 @@ func initBroadcast(n *maelstrom.Node, count int, s *server) broadcaster {
 								if err := json.Unmarshal(response_msg.Body, &response_body); err != nil {
 									return err
 								}
+								s.neighbors[nbr].neighbor_mutex.Lock()
+								defer s.neighbors[nbr].neighbor_mutex.Unlock()
 								if response_body["type"].(string) == "broadcast_ok" {
 									success = true
 									// Remove the messages we sent from the to_send list

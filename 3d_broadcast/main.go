@@ -30,11 +30,16 @@ type broadcaster struct {
 	ch chan broadcastMsg
 }
 
+type neighbor struct {
+	neighbor_mutex sync.Mutex
+	to_send   map[int]struct{} // values we need to send to our neighbor
+}
+
 type server struct {
 	n                *maelstrom.Node
 	seen_set         map[int]struct{}
 	seen_mutex       sync.Mutex
-	neighbors        map[string]map[int]struct{}
+	neighbors        map[string]neighbor
 	broadcast_worker broadcaster
 }
 
@@ -127,12 +132,12 @@ func (s *server) receive_topology(msg maelstrom.Message) error {
 	if err := json.Unmarshal(msg.Body, &body); err != nil {
 		return err
 	}
-	s.neighbors = make(map[string]map[int]struct{})
+	s.neighbors = make(map[string]neighbor)
 	for k, v := range body["topology"].(map[string]interface{}) {
 		// If the key is this node, add all the neighbors to the topology map, along with an empty list as their value
 		if k == s.n.ID() {
-			for _, neighbor := range v.([]interface{}) {
-				s.neighbors[neighbor.(string)] = make(map[int]struct{})
+			for _, nbr := range v.([]interface{}) {
+				s.neighbors[nbr.(string)] = neighbor{to_send: make(map[int]struct{})}
 			}
 		}
 	}

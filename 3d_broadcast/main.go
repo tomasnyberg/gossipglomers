@@ -23,19 +23,14 @@ func main() {
 	}
 }
 
-type broadcastMsg struct {
-	peer string
-	body []byte
-}
-
 type broadcaster struct {
-	ch chan string
+	ch     chan string
 	server *server
 }
 
 type neighbor struct {
 	neighbor_mutex *sync.Mutex
-	to_send   map[int]struct{} // values we need to send to our neighbor
+	to_send        map[int]struct{} // values we need to send to our neighbor
 }
 
 type server struct {
@@ -52,53 +47,53 @@ func initBroadcast(n *maelstrom.Node, count int, s *server) broadcaster {
 		go func() {
 			for {
 				select {
-					case nbr := <-ch:
-						go func() {
-							var success bool = false
-							s.neighbors[nbr].neighbor_mutex.Lock()
-							if len(s.neighbors[nbr].to_send) == 0 {
-							    s.neighbors[nbr].neighbor_mutex.Unlock()
-								return
+				case nbr := <-ch:
+					go func() {
+						var success bool = false
+						s.neighbors[nbr].neighbor_mutex.Lock()
+						if len(s.neighbors[nbr].to_send) == 0 {
+							s.neighbors[nbr].neighbor_mutex.Unlock()
+							return
+						}
+						// Save s.neighbors[nbr].to_send to a []int instead of a map
+						var messages []int = make([]int, 0)
+						for value := range s.neighbors[nbr].to_send {
+							messages = append(messages, value)
+							delete(s.neighbors[nbr].to_send, value)
+						}
+						s.neighbors[nbr].neighbor_mutex.Unlock()
+						message_body := map[string]interface{}{
+							"message": messages,
+							"type":    "multi_broadcast",
+						}
+						message_body_byte, err := json.Marshal(message_body)
+						if err != nil {
+							log.Fatal(err)
+						}
+						message_body_raw := json.RawMessage(message_body_byte)
+						if err := n.RPC(nbr, message_body_raw, func(response_msg maelstrom.Message) error {
+							var response_body map[string]interface{}
+							if err := json.Unmarshal(response_msg.Body, &response_body); err != nil {
+								return err
 							}
-							// Save s.neighbors[nbr].to_send to a []int instead of a map
-							var messages []int = make([]int, 0)
-							for value := range s.neighbors[nbr].to_send {
-								messages = append(messages, value)
-								delete(s.neighbors[nbr].to_send, value)
+							if response_body["type"].(string) == "broadcast_ok" {
+								success = true
+							}
+							return nil
+						}); err != nil {
+							ch <- nbr
+						}
+						time.Sleep(250 * time.Millisecond)
+						if !success {
+							s.neighbors[nbr].neighbor_mutex.Lock()
+							for _, message := range messages {
+								s.neighbors[nbr].to_send[message] = struct{}{}
 							}
 							s.neighbors[nbr].neighbor_mutex.Unlock()
-							message_body := map[string]interface{}{
-								"message": messages,
-								"type":    "multi_broadcast",
-							}
-							message_body_byte, err := json.Marshal(message_body)
-							if err != nil {
-								log.Fatal(err)
-							}
-							message_body_raw := json.RawMessage(message_body_byte)
-							if err := n.RPC(nbr, message_body_raw, func(response_msg maelstrom.Message) error {
-								var response_body map[string]interface{}
-								if err := json.Unmarshal(response_msg.Body, &response_body); err != nil {
-									return err
-								}
-								if response_body["type"].(string) == "broadcast_ok" {
-									success = true
-								}
-								return nil
-							}); err != nil {
-								ch <- nbr
-							}
-							time.Sleep(250 * time.Millisecond)
-							if !success {
-								s.neighbors[nbr].neighbor_mutex.Lock()
-								for _, message := range messages {
-									s.neighbors[nbr].to_send[message] = struct{}{}
-								}
-								s.neighbors[nbr].neighbor_mutex.Unlock()
-								ch <- nbr
-							}
-						}()
-					}
+							ch <- nbr
+						}
+					}()
+				}
 			}
 		}()
 	}
@@ -120,10 +115,10 @@ func (s *server) receive_multi_broadcast(msg maelstrom.Message) error {
 	return s.n.Reply(msg, body)
 }
 
-func (s *server) handle_new_messages(messages[] int){
+func (s *server) handle_new_messages(messages []int) {
 	s.seen_mutex.Lock()
 	var to_send []int = make([]int, 0)
-	for _ , message := range messages {
+	for _, message := range messages {
 		if _, ok := s.seen_set[message]; !ok {
 			s.seen_set[message] = struct{}{}
 			to_send = append(to_send, message)

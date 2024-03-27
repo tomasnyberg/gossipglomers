@@ -56,8 +56,8 @@ func initBroadcast(n *maelstrom.Node, count int, s *server) broadcaster {
 						go func() {
 							var success bool = false
 							s.neighbors[nbr].neighbor_mutex.Lock()
-							defer s.neighbors[nbr].neighbor_mutex.Unlock()
 							if len(s.neighbors[nbr].to_send) == 0 {
+							    s.neighbors[nbr].neighbor_mutex.Unlock()
 								return
 							}
 							// Save s.neighbors[nbr].to_send to a []int instead of a map
@@ -65,6 +65,7 @@ func initBroadcast(n *maelstrom.Node, count int, s *server) broadcaster {
 							for value := range s.neighbors[nbr].to_send {
 								messages = append(messages, value)
 							}
+							s.neighbors[nbr].neighbor_mutex.Unlock()
 							message_body := map[string]interface{}{
 								"message": messages,
 								"type":    "multi_broadcast",

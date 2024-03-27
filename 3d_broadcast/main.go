@@ -64,6 +64,7 @@ func initBroadcast(n *maelstrom.Node, count int, s *server) broadcaster {
 							var messages []int = make([]int, 0)
 							for value := range s.neighbors[nbr].to_send {
 								messages = append(messages, value)
+								delete(s.neighbors[nbr].to_send, value)
 							}
 							s.neighbors[nbr].neighbor_mutex.Unlock()
 							message_body := map[string]interface{}{
@@ -80,14 +81,8 @@ func initBroadcast(n *maelstrom.Node, count int, s *server) broadcaster {
 								if err := json.Unmarshal(response_msg.Body, &response_body); err != nil {
 									return err
 								}
-								s.neighbors[nbr].neighbor_mutex.Lock()
-								defer s.neighbors[nbr].neighbor_mutex.Unlock()
 								if response_body["type"].(string) == "broadcast_ok" {
 									success = true
-									// Remove the messages we sent from the to_send list
-									for value := range s.neighbors[nbr].to_send {
-										delete(s.neighbors[nbr].to_send, value)
-									}
 								}
 								return nil
 							}); err != nil {
@@ -95,6 +90,11 @@ func initBroadcast(n *maelstrom.Node, count int, s *server) broadcaster {
 							}
 							time.Sleep(250 * time.Millisecond)
 							if !success {
+								s.neighbors[nbr].neighbor_mutex.Lock()
+								for _, message := range messages {
+									s.neighbors[nbr].to_send[message] = struct{}{}
+								}
+								s.neighbors[nbr].neighbor_mutex.Unlock()
 								ch <- nbr
 							}
 						}()

@@ -59,9 +59,50 @@ While this approach solves the problem, allowing nodes to propagate even with a 
                  :msg-count 23549,
                  :msgs-per-op 117.1592},
 ```
-which is to say, we send more than `100` messages around the network for every new message that enters it (not great). Performance was of fairly small concern here, but that will change in the upcoming challenge(s). There is also this issue:
-```edn
-:stable-count 91,
-:stale-count 79,
+which is to say, we send more than `100` messages around the network for every new message that enters it (not great). Performance was of fairly small concern here, but that will change in the upcoming challenge(s).
+
+### 3d: Efficient broadcast, part 1
+In the words of the challenge authors: "<em>Not only do [Distributed Systems] need to be correct, but they also need to be fast</em>." Where as before we were only concerned with correctness, we are now tasked with making the network efficient as well. In addition to ensuring our solution is correct (including with network outages!) we now need to meet certain performance criteria.
+
+The paremeters for this challenge are bumped up quite significantly:
 ```
-what this means is that, while all our value were stable, stale behaviour was observed in 79 (almost all) of them. This suggests that, while the values are being propagated correctly, they do so very slowly.
+Nodes in the cluster: 25
+Latency: 100ms
+Rate (new messages/s): 100
+```
+And the performance criteria are as follows:
+```
+Messages per operation: Less than 30
+Median latency: Less than 400
+Max latency: Less than 600
+```
+Running my (unmodified) 3c solution with these parameters resulted in the following metrics:
+```
+Messages per operation: ~80
+Median latency: ~450
+Max latency: ~800
+```
+which is to say, some drastic improvements were needed.
+
+#### Solution
+The first inefficiency that came to my mind was the fact that we always send one message at a time, regardless of if the neighbor we're sending it to has multiple unseen messages. My idea to resolve this was fairly simple (and much more complicated to implement): For all our neighbors, keep track of the messages they have not seen yet. Then, when sending messages to that neighbor, send everything in that set. See the method `multi_broadcast_to_nbr()` method for reference.
+
+While this reduced the messages per operation by a good amount (around 20-30%), it was not at all as efficient as I imagined it to be. 
+Upon closer inspection, a significant portion of messages being sent contained only one message regardless, meaning there was oftentimes no improvement.  
+Nonetheless, it was a big improvement and moved me closer to the goal.
+I would also imagine that it's more useful in the case of network failures, where a node has to wait a while before talking to its neighbors (letting multiple messages pile up).
+
+A <strong>much</strong> simpler improvement that I thought of shortly afterwards was even more effective, more than halving the messages per operation metric.
+It is as easy as this: If a node receives a message from a neighbor, it should not send that message back to the same neighbor.
+
+The last thing that I improved was simply changing the topology of the network. The default for maelstrom is a 2d grid, which is of course quite inefficient when passing messages from one corner to the other. 
+I noticed that `--topology tree4`, which changes the default topology that maelstrom provides to a tree with branching factor `4` offered significant improvements to all targeted metrics. In fact, enough to make me pass all the requirements.
+
+Obviously, I was not satisfied with just passing a paremeter, so I implemented the construction of the tree myself. Using a tree (with branching factor 5, since I found that was even better) I finally obtained these results:
+```
+Messages per operation: ~19
+Median latency: ~375
+Max latency: ~500
+```
+which meant that I had completed the challenge 🚀🚀
+

@@ -109,13 +109,13 @@ func (s *server) receive_multi_broadcast(msg maelstrom.Message) error {
 	for _, message := range body["message"].([]interface{}) {
 		messages = append(messages, int(message.(float64)))
 	}
-	s.handle_new_messages(messages)
+	s.handle_new_messages(messages, msg.Src)
 	delete(body, "message")
 	body["type"] = "broadcast_ok"
 	return s.n.Reply(msg, body)
 }
 
-func (s *server) handle_new_messages(messages []int) {
+func (s *server) handle_new_messages(messages []int, src string) {
 	s.seen_mutex.Lock()
 	var to_send []int = make([]int, 0)
 	for _, message := range messages {
@@ -126,6 +126,9 @@ func (s *server) handle_new_messages(messages []int) {
 	}
 	s.seen_mutex.Unlock()
 	for peer := range s.neighbors {
+		if peer == src {
+			continue
+		}
 		s.neighbors[peer].neighbor_mutex.Lock()
 		for _, message := range to_send {
 			s.neighbors[peer].to_send[message] = struct{}{}
@@ -143,7 +146,7 @@ func (s *server) receive_broadcast(msg maelstrom.Message) error {
 	var received_int int = int(body["message"].(float64))
 	// create an int array of just the received int
 	var messages []int = []int{received_int}
-	s.handle_new_messages(messages)
+	s.handle_new_messages(messages, msg.Src)
 	delete(body, "message")
 	body["type"] = "broadcast_ok"
 	return s.n.Reply(msg, body)

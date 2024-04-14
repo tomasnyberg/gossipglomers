@@ -174,15 +174,41 @@ func (s *server) receive_topology(msg maelstrom.Message) error {
 		return err
 	}
 	s.neighbors = make(map[string]neighbor)
-	for k, v := range body["topology"].(map[string]interface{}) {
-		// If the key is this node, add all the neighbors to the topology map, along with an empty list as their value
-		if k == s.n.ID() {
-			for _, nbr := range v.([]interface{}) {
-				s.neighbors[nbr.(string)] = neighbor{to_send: make(map[int]struct{}), neighbor_mutex: &sync.Mutex{}}
-			}
-		}
+	// Every node does this which is a bit excessive, but for an actual system we would supply this when initializing the network.
+	// In fact, that is possible by passing --topology tree4 to the maelstrom command, but I felt like that was cheating.
+	topology := generate_tree5_topology(s.n)
+	for _, nbr := range topology[s.n.ID()] {
+		s.neighbors[nbr] = neighbor{to_send: make(map[int]struct{}), neighbor_mutex: &sync.Mutex{}}
 	}
 	delete(body, "topology")
 	body["type"] = "topology_ok"
 	return s.n.Reply(msg, body)
+}
+
+func generate_tree5_topology(n *maelstrom.Node) (topology map[string][]string) {
+	ids := n.NodeIDs()
+	topology = make(map[string][]string)
+	for _, id := range ids {
+		topology[id] = []string{}
+	}
+	st := []string{"n0"}
+	in_tree := make(map[string]struct{})
+	for len(st) > 0 {
+		// This is inefficient, but I don't care :) we're just gonna 25 nodes anyway
+		// a realistic cluster probably wouldn't exceed that anyway [CITATION NEEDED]
+		node := st[0]
+		st = st[1:]
+		for _, id := range ids {
+			if _, ok := in_tree[id]; !ok {
+				topology[node] = append(topology[node], id)
+				topology[id] = append(topology[id], node)
+				in_tree[id] = struct{}{}
+				st = append(st, id)
+			}
+			if len(topology[node]) == 5 {
+				break
+			}
+		}
+	}
+	return
 }

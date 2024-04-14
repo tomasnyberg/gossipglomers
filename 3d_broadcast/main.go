@@ -41,6 +41,49 @@ type server struct {
 	broadcast_worker broadcaster
 }
 
+func multi_broadcast_to_nbr(s *server, n *maelstrom.Node, nbr string, ch chan string) {
+	var success bool = false
+	s.neighbors[nbr].neighbor_mutex.Lock()
+	if len(s.neighbors[nbr].to_send) == 0 {
+		s.neighbors[nbr].neighbor_mutex.Unlock()
+		return
+	}
+	var messages []int = make([]int, 0)
+	for value := range s.neighbors[nbr].to_send {
+		messages = append(messages, value)
+		delete(s.neighbors[nbr].to_send, value)
+	}
+	s.neighbors[nbr].neighbor_mutex.Unlock()
+	message_body := map[string]interface{}{
+		"message": messages,
+		"type":    "multi_broadcast",
+	}
+	message_body_byte, err := json.Marshal(message_body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	message_body_raw := json.RawMessage(message_body_byte)
+	err = n.RPC(nbr, message_body_raw, func(response_msg maelstrom.Message) error {
+		var response_body map[string]interface{}
+		if err := json.Unmarshal(response_msg.Body, &response_body); err != nil {
+			return err
+		}
+		if response_body["type"].(string) == "broadcast_ok" {
+			success = true
+		}
+		return nil
+	})
+	time.Sleep(250 * time.Millisecond)
+	if !success || err != nil {
+		s.neighbors[nbr].neighbor_mutex.Lock()
+		for _, message := range messages {
+			s.neighbors[nbr].to_send[message] = struct{}{}
+		}
+		s.neighbors[nbr].neighbor_mutex.Unlock()
+		ch <- nbr
+	}
+}
+
 func initBroadcast(n *maelstrom.Node, count int, s *server) broadcaster {
 	ch := make(chan string)
 	for i := 0; i < count; i++ {
@@ -48,51 +91,7 @@ func initBroadcast(n *maelstrom.Node, count int, s *server) broadcaster {
 			for {
 				select {
 				case nbr := <-ch:
-					go func() {
-						var success bool = false
-						s.neighbors[nbr].neighbor_mutex.Lock()
-						if len(s.neighbors[nbr].to_send) == 0 {
-							s.neighbors[nbr].neighbor_mutex.Unlock()
-							return
-						}
-						// Save s.neighbors[nbr].to_send to a []int instead of a map
-						var messages []int = make([]int, 0)
-						for value := range s.neighbors[nbr].to_send {
-							messages = append(messages, value)
-							delete(s.neighbors[nbr].to_send, value)
-						}
-						s.neighbors[nbr].neighbor_mutex.Unlock()
-						message_body := map[string]interface{}{
-							"message": messages,
-							"type":    "multi_broadcast",
-						}
-						message_body_byte, err := json.Marshal(message_body)
-						if err != nil {
-							log.Fatal(err)
-						}
-						message_body_raw := json.RawMessage(message_body_byte)
-						if err := n.RPC(nbr, message_body_raw, func(response_msg maelstrom.Message) error {
-							var response_body map[string]interface{}
-							if err := json.Unmarshal(response_msg.Body, &response_body); err != nil {
-								return err
-							}
-							if response_body["type"].(string) == "broadcast_ok" {
-								success = true
-							}
-							return nil
-						}); err != nil {
-							ch <- nbr
-						}
-						time.Sleep(250 * time.Millisecond)
-						if !success {
-							s.neighbors[nbr].neighbor_mutex.Lock()
-							for _, message := range messages {
-								s.neighbors[nbr].to_send[message] = struct{}{}
-							}
-							s.neighbors[nbr].neighbor_mutex.Unlock()
-							ch <- nbr
-						}
-					}()
+					go multi_broadcast_to_nbr(s, n, nbr, ch)
 				}
 			}
 		}()

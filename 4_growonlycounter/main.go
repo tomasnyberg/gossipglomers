@@ -35,8 +35,7 @@ func (s *server) accept_read(msg maelstrom.Message) error {
 	body["type"] = "read_ok"
 	value, err := s.kv.ReadInt(*s.ctx, "value")
 	if err != nil {
-		value = 0
-		// return err;
+		value = 0 // hasn't been written yet
 	}
 	body["value"] = value
 	return s.n.Reply(msg, body)
@@ -49,12 +48,16 @@ func (s *server) accept_add(msg maelstrom.Message) error {
 	}
 	body["type"] = "add_ok"
 	var delta int = int(body["delta"].(float64))
-	value, err := s.kv.ReadInt(*s.ctx, "value")
-	if err != nil {
-		value = 0
-		// return err;
+	for true {
+		value, err := s.kv.ReadInt(*s.ctx, "value")
+		if err != nil {
+			value = 0 // The value hasn't been written yet
+		}
+		err = s.kv.CompareAndSwap(*s.ctx, "value", value, value+delta, true)
+		if err == nil {
+			break
+		}
 	}
-	s.kv.CompareAndSwap(*s.ctx, "value", value, value+delta, true)
 	delete(body, "delta")
 	return s.n.Reply(msg, body)
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	// "fmt"
 	"log"
@@ -9,13 +10,16 @@ import (
 )
 
 type server struct {
-	n     *maelstrom.Node
-	value int
+	n   *maelstrom.Node
+	kv  *maelstrom.KV
+	ctx *context.Context
 }
 
 func main() {
 	n := maelstrom.NewNode()
-	serv := &server{n: n, value: 0}
+	ctx := context.Background()
+	kv := maelstrom.NewSeqKV(n)
+	serv := &server{n: n, kv: kv, ctx: &ctx}
 	n.Handle("read", serv.accept_read)
 	n.Handle("add", serv.accept_add)
 	if err := n.Run(); err != nil {
@@ -29,7 +33,12 @@ func (s *server) accept_read(msg maelstrom.Message) error {
 		return err
 	}
 	body["type"] = "read_ok"
-	body["value"] = s.value
+	value, err := s.kv.ReadInt(*s.ctx, "value")
+	if err != nil {
+		value = 0
+		// return err;
+	}
+	body["value"] = value
 	return s.n.Reply(msg, body)
 }
 
@@ -40,7 +49,12 @@ func (s *server) accept_add(msg maelstrom.Message) error {
 	}
 	body["type"] = "add_ok"
 	var delta int = int(body["delta"].(float64))
-	s.value += delta
+	value, err := s.kv.ReadInt(*s.ctx, "value")
+	if err != nil {
+		value = 0
+		// return err;
+	}
+	s.kv.CompareAndSwap(*s.ctx, "value", value, value+delta, true)
 	delete(body, "delta")
 	return s.n.Reply(msg, body)
 }

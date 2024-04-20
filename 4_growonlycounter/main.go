@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"os"
+
 	// "fmt"
 	"log"
 
@@ -20,6 +22,8 @@ func main() {
 	ctx := context.Background()
 	kv := maelstrom.NewSeqKV(n)
 	serv := &server{n: n, kv: kv, ctx: &ctx}
+	f, _ := os.OpenFile("errlog", os.O_RDWR | os.O_CREATE | os.O_TRUNC, 0666)
+	log.SetOutput(f)
 	n.Handle("read", serv.accept_read)
 	n.Handle("add", serv.accept_add)
 	if err := n.Run(); err != nil {
@@ -56,6 +60,8 @@ func (s *server) accept_add(msg maelstrom.Message) error {
 		err = s.kv.CompareAndSwap(*s.ctx, "value", value, value+delta, true)
 		if err == nil {
 			break
+		} else {
+			log.Println(err)
 		}
 	}
 	delete(body, "delta")

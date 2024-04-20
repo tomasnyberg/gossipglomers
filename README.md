@@ -106,4 +106,16 @@ Max latency: ~500
 ```
 which meant that I had completed the challenge 🚀
 
+### 3e: Efficient broadcast, part 2
+<em>"Why settle for a fast distributed system when you could always make it faster?"</em>
+
+The next challenge does not impose any additional constraints, but simply adjusts the performance criteria that need to be met.
+The metrics that need to be met for this challenge (with the same network parameters as before) are:
+```
+Messages per operation: Less than 20
+Median latency: Less than 1000ms
+Max latency: Less than 2000ms
+```
+#### Solution
+Funnily enough, my solution to the previous task already meets all of the criteria, with the messages per operation metric just barely squeezing by. At this point, I was getting fairly tired of gossiping integers around, and so I did not bother optimizing my network further. I'm guessing some of the optimizations I did in 3d were intended for 3e (such as the multi-broadcasting).
 

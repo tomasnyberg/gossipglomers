@@ -21,10 +21,10 @@ func main() {
 }
 
 type server struct {
-	n        *maelstrom.Node
-	seen_set map[int]struct{}
-	seen_mutex  sync.Mutex
-	topology map[string]map[string]struct{}
+	n          *maelstrom.Node
+	seen_set   map[int]struct{}
+	seen_mutex sync.Mutex
+	topology   map[string]map[string]struct{}
 }
 
 func (s *server) receive_broadcast(msg maelstrom.Message) error {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"sync"
 
 	// "fmt"
 	"log"
@@ -15,13 +16,14 @@ type server struct {
 	n   *maelstrom.Node
 	kv  *maelstrom.KV
 	ctx *context.Context
+	mu  sync.Mutex
 }
 
 func main() {
 	n := maelstrom.NewNode()
 	ctx := context.Background()
 	kv := maelstrom.NewSeqKV(n)
-	serv := &server{n: n, kv: kv, ctx: &ctx}
+	serv := &server{n: n, kv: kv, ctx: &ctx, mu:sync.Mutex{}}
 	f, _ := os.OpenFile("errlog", os.O_RDWR | os.O_CREATE | os.O_TRUNC, 0666)
 	log.SetOutput(f)
 	n.Handle("read", serv.accept_read)
@@ -37,9 +39,15 @@ func (s *server) accept_read(msg maelstrom.Message) error {
 		return err
 	}
 	body["type"] = "read_ok"
-	value, err := s.kv.ReadInt(*s.ctx, "value")
-	if err != nil {
-		value = 0 // hasn't been written yet
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var value int = 0
+	for _, id := range(s.n.NodeIDs()) {
+		peer_val, err := s.kv.ReadInt(*s.ctx, id)
+		if err != nil {
+			peer_val = 0
+		}
+		value += peer_val
 	}
 	body["value"] = value
 	return s.n.Reply(msg, body)
@@ -52,18 +60,13 @@ func (s *server) accept_add(msg maelstrom.Message) error {
 	}
 	body["type"] = "add_ok"
 	var delta int = int(body["delta"].(float64))
-	for true {
-		value, err := s.kv.ReadInt(*s.ctx, "value")
-		if err != nil {
-			value = 0 // The value hasn't been written yet
-		}
-		err = s.kv.CompareAndSwap(*s.ctx, "value", value, value+delta, true)
-		if err == nil {
-			break
-		} else {
-			log.Println(err)
-		}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	value, err := s.kv.ReadInt(*s.ctx, s.n.ID())
+	if err != nil {
+		value = 0
 	}
+	s.kv.Write(*s.ctx, s.n.ID(), value + delta)
 	delete(body, "delta")
 	return s.n.Reply(msg, body)
 }

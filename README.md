@@ -93,7 +93,7 @@ Nonetheless, it was a big improvement and moved me closer to the goal.
 I would also imagine that it's more useful in the case of network failures, where a node has to wait a while before talking to its neighbors (letting multiple messages pile up).
 
 A <strong>much</strong> simpler improvement that I thought of shortly afterwards was even more effective, more than halving the messages per operation metric.
-It is as easy as this: If a node receives a message from a neighbor, it should not send that message back to the same neighbor.
+It was as simple as this: If a node receives a message from a neighbor, it should not send that message back to the same neighbor.
 
 The last thing that I improved was simply changing the topology of the network. The default for maelstrom is a 2d grid, which is of course quite inefficient when passing messages from one corner to the other. 
 I noticed that `--topology tree4`, which changes the default topology that maelstrom provides to a tree with branching factor `4` offered significant improvements to all targeted metrics. In fact, enough to make me pass all the requirements.
@@ -104,5 +104,6 @@ Messages per operation: ~19
 Median latency: ~375
 Max latency: ~500
 ```
-which meant that I had completed the challenge 🚀🚀
+which meant that I had completed the challenge 🚀
+
 

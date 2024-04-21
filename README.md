@@ -119,3 +119,24 @@ Max latency: Less than 2000ms
 #### Solution
 Funnily enough, my solution to the previous task already meets all of the criteria, with the messages per operation metric just barely squeezing by. At this point, I was getting fairly tired of gossiping integers around, and so I did not bother optimizing my network further. I'm guessing some of the optimizations I did in 3d were intended for 3e (such as the multi-broadcasting).
 
+## 4: Grow-only counter
+In this challenge, we have three nodes in the cluster, and they periodically receive messages of this form:
+```yaml
+type:add
+delta:123
+```
+The challenge is then to keep track of the total sum of all deltas that have entered the network, and ensure that it is <strong>eventually</strong> consistent. Which is to say, every node periodically has to answer messages of this form:
+```
+type:read
+```
+with 
+```
+value:x // Where x is the current global total of all the deltas
+```
+We are also given access to a <strong>sequentially</strong> consistent KV-store that maelstrom manages for us.
+#### Solution.
+The challenge is to create a [Conflict-free replicated datatype](https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type). A naive approach would be to, on every add operation, read the value in the KV-store and write back the updated value. Because of the check-then-act nature of this, it obviously won't succeed. A slightly better approach is to read and perform compare-and-swap until the swap succeeds, which ensures that updates aren't overwriting each other. While this is slightly better and ensures updates aren't lost, it doesn't guarantee eventual consistency due to the amount of contention and inefficiency. For reference, I would get correct results about 50% of the time with this approach.
+
+Slightly better is to have a value in the KV for every node, and then the answer for a read message would simply be the sum of the KV-reads for every node. At this point, I also introduced a local cache for every node which keeps track of the values of other nodes (in the case a KV-read isn't successful due to network partitions). This actually succeeded most of the time for me, with about an 80% success rate for the given parameters. The remaining issue was still the slow convergence.
+
+The final improvement I made was to, instead of asking the KV for every node's value, ask the other nodes themselves for it. This improved my convergence to the point where my tests would pass 100% of the time (or at least it seems that way, based on 50 runs without any errors). 

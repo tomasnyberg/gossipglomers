@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"sync"
+	"time"
 
 	// "fmt"
 	"log"
@@ -29,6 +30,7 @@ func main() {
 	log.SetOutput(f)
 	n.Handle("read", serv.accept_read)
 	n.Handle("add", serv.accept_add)
+	n.Handle("local", serv.accept_local)
 	if err := n.Run(); err != nil {
 		log.Fatal(err)
 	}
@@ -40,15 +42,28 @@ func (s *server) accept_read(msg maelstrom.Message) error {
 		return err
 	}
 	body["type"] = "read_ok"
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	var value int = 0
 	for _, id := range(s.n.NodeIDs()) {
-		peer_val, err := s.kv.ReadInt(*s.ctx, id)
-		if err != nil {
-			peer_val = s.cache[id]
+		var peer_val int = s.cache[id]
+		if id == s.n.ID() {
+			read_res, read_res_err := s.kv.ReadInt(*s.ctx, id)
+			if read_res_err == nil {
+				peer_val = read_res
+			}
 		} else {
-			s.cache[id] = peer_val
+			ctx, cancel := context.WithTimeout(*s.ctx, time.Second)
+			body := map[string]any {
+				"type": "local",
+			}
+			msg, msg_err := s.n.SyncRPC(ctx, id, body)
+			cancel()
+			var res_body map[string]any
+			if parse_err := json.Unmarshal(msg.Body, &res_body); parse_err != nil {
+				log.Printf("Incorrect response from local %s \n", msg_err)
+				// return parse_err
+			} else {
+				peer_val = int(res_body["value"].(float64))
+			}
 		}
 		value += peer_val
 	}
@@ -69,5 +84,15 @@ func (s *server) accept_add(msg maelstrom.Message) error {
 	s.kv.Write(*s.ctx, s.n.ID(), value + delta)
 	s.cache[s.n.ID()] = value + delta
 	delete(body, "delta")
+	return s.n.Reply(msg, body)
+}
+
+func (s *server) accept_local(msg maelstrom.Message) error {
+	var body map[string]any
+	if err := json.Unmarshal(msg.Body, &body); err != nil {
+		return err
+	}
+	body["type"] = "local_ok"
+	body["value"] = s.cache[s.n.ID()]
 	return s.n.Reply(msg, body)
 }

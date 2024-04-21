@@ -59,11 +59,8 @@ func (s *server) handle_poll(msg maelstrom.Message) error {
 		}
 	}
 	body["type"] = "poll_ok"
-	rawjsonmsgs, err := json.Marshal(results)
-	if err != nil {
-		return err
-	}
-	body["msgs"] = rawjsonmsgs
+	body["msgs"] = results
+	delete(body, "offsets")
 	return s.n.Reply(msg, body)
 }
 

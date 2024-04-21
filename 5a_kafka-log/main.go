@@ -74,6 +74,7 @@ func (s *server) handle_commit_offsets(msg maelstrom.Message) error {
 		s.read_to[topic] = int(offset.(float64))
 	}
 	body["type"] = "commit_offsets_ok"
+	delete(body, "offsets")
 	return s.n.Reply(msg, body)
 }
 

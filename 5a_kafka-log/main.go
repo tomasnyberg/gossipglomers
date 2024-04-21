@@ -87,7 +87,10 @@ func (s *server) handle_list_committed_offsets(msg maelstrom.Message) error {
 	results := make(map[string]int)
 	for _, key := range(keys) {
 		keystring := key.(string)
-		results[keystring] = s.read_to[keystring] // TODO keys that do not exist on the node can be omitted
+		if _, ok := s.read_to[keystring]; !ok {
+			continue
+		}
+		results[keystring] = s.read_to[keystring]
 	}
 	body["offsets"] = results
 	body["type"] = "list_committed_offsets_ok"

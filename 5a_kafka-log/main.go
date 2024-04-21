@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"os"
 
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
@@ -10,6 +11,8 @@ import (
 func main() {
 	n := maelstrom.NewNode()
 	serv := server{n: n, logs: make(map[string][]int), read_to: make(map[string]int)}
+	f, _ := os.OpenFile("errlog", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+	log.SetOutput(f)
 	n.Handle("send", serv.handle_read)
 	n.Handle("poll", serv.handle_poll)
 	n.Handle("commit_offsets", serv.handle_commit_offsets)

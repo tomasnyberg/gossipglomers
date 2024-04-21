@@ -90,5 +90,6 @@ func (s *server) handle_list_committed_offsets(msg maelstrom.Message) error {
 	}
 	body["offsets"] = results
 	body["type"] = "list_committed_offsets_ok"
+	delete(body, "keys")
 	return s.n.Reply(msg, body)
 }

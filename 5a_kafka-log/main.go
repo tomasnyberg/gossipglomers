@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"sync"
 
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
@@ -26,6 +27,7 @@ type server struct {
 	n       *maelstrom.Node
 	logs    map[string][]int
 	read_to map[string]int
+	mu sync.Mutex
 }
 
 func (s *server) handle_read(msg maelstrom.Message) error {
@@ -33,6 +35,8 @@ func (s *server) handle_read(msg maelstrom.Message) error {
 	if err := json.Unmarshal(msg.Body, &body); err != nil {
 		return err
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	val := int(body["msg"].(float64))
 	key := body["key"].(string)
 	s.logs[key] = append(s.logs[key], val)
@@ -48,6 +52,8 @@ func (s *server) handle_poll(msg maelstrom.Message) error {
 	if err := json.Unmarshal(msg.Body, &body); err != nil {
 		return err
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	var offsets = body["offsets"].(map[string]interface{})
 	var results map[string][][]int = make(map[string][][]int)
 	for topic, offset := range(offsets) {
@@ -69,6 +75,8 @@ func (s *server) handle_commit_offsets(msg maelstrom.Message) error {
 	if err := json.Unmarshal(msg.Body, &body); err != nil {
 		return err
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	var offsets = body["offsets"].(map[string]interface{})
 	for topic, offset := range(offsets) {
 		s.read_to[topic] = int(offset.(float64))
@@ -83,6 +91,8 @@ func (s *server) handle_list_committed_offsets(msg maelstrom.Message) error {
 	if err := json.Unmarshal(msg.Body, &body); err != nil {
 		return err
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	keys := body["keys"].([]interface{})
 	results := make(map[string]int)
 	for _, key := range(keys) {

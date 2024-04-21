@@ -3,21 +3,19 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"os"
 	"sync"
 	"time"
-
-	// "fmt"
-	"log"
 
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
 
 type server struct {
-	n   *maelstrom.Node
-	kv  *maelstrom.KV
-	ctx *context.Context
-	mu  sync.Mutex
+	n     *maelstrom.Node
+	kv    *maelstrom.KV
+	ctx   *context.Context
+	mu    sync.Mutex
 	cache map[string]int
 }
 
@@ -25,8 +23,8 @@ func main() {
 	n := maelstrom.NewNode()
 	ctx := context.Background()
 	kv := maelstrom.NewSeqKV(n)
-	serv := &server{n: n, kv: kv, ctx: &ctx, mu:sync.Mutex{}, cache:make(map[string]int)}
-	f, _ := os.OpenFile("errlog", os.O_RDWR | os.O_CREATE | os.O_TRUNC, 0666)
+	serv := &server{n: n, kv: kv, ctx: &ctx, mu: sync.Mutex{}, cache: make(map[string]int)}
+	f, _ := os.OpenFile("errlog", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 	log.SetOutput(f)
 	n.Handle("read", serv.accept_read)
 	n.Handle("add", serv.accept_add)
@@ -43,7 +41,7 @@ func (s *server) accept_read(msg maelstrom.Message) error {
 	}
 	body["type"] = "read_ok"
 	var value int = 0
-	for _, id := range(s.n.NodeIDs()) {
+	for _, id := range s.n.NodeIDs() {
 		var peer_val int = s.cache[id]
 		if id == s.n.ID() {
 			read_res, read_res_err := s.kv.ReadInt(*s.ctx, id)
@@ -52,15 +50,14 @@ func (s *server) accept_read(msg maelstrom.Message) error {
 			}
 		} else {
 			ctx, cancel := context.WithTimeout(*s.ctx, time.Second)
-			body := map[string]any {
+			body := map[string]any{
 				"type": "local",
 			}
 			msg, msg_err := s.n.SyncRPC(ctx, id, body)
 			cancel()
 			var res_body map[string]any
 			if parse_err := json.Unmarshal(msg.Body, &res_body); parse_err != nil {
-				log.Printf("Incorrect response from local %s \n", msg_err)
-				// return parse_err
+				log.Printf("Error when asking peer for value: %s \n", msg_err)
 			} else {
 				peer_val = int(res_body["value"].(float64))
 			}
@@ -81,7 +78,7 @@ func (s *server) accept_add(msg maelstrom.Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	value := s.cache[s.n.ID()]
-	s.kv.Write(*s.ctx, s.n.ID(), value + delta)
+	s.kv.Write(*s.ctx, s.n.ID(), value+delta)
 	s.cache[s.n.ID()] = value + delta
 	delete(body, "delta")
 	return s.n.Reply(msg, body)

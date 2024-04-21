@@ -54,7 +54,7 @@ func (s *server) handle_poll(msg maelstrom.Message) error {
 		offset_inted := int(offset.(float64))
 		for idx, msg := range(s.logs[topic]) {
 			if idx >= offset_inted {
-				results[topic] = append(results[topic], []int{msg, idx})
+				results[topic] = append(results[topic], []int{idx, msg})
 			}
 		}
 	}

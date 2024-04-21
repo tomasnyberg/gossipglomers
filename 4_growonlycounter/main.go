@@ -17,13 +17,14 @@ type server struct {
 	kv  *maelstrom.KV
 	ctx *context.Context
 	mu  sync.Mutex
+	cache map[string]int
 }
 
 func main() {
 	n := maelstrom.NewNode()
 	ctx := context.Background()
 	kv := maelstrom.NewSeqKV(n)
-	serv := &server{n: n, kv: kv, ctx: &ctx, mu:sync.Mutex{}}
+	serv := &server{n: n, kv: kv, ctx: &ctx, mu:sync.Mutex{}, cache:make(map[string]int)}
 	f, _ := os.OpenFile("errlog", os.O_RDWR | os.O_CREATE | os.O_TRUNC, 0666)
 	log.SetOutput(f)
 	n.Handle("read", serv.accept_read)
@@ -45,7 +46,9 @@ func (s *server) accept_read(msg maelstrom.Message) error {
 	for _, id := range(s.n.NodeIDs()) {
 		peer_val, err := s.kv.ReadInt(*s.ctx, id)
 		if err != nil {
-			peer_val = 0
+			peer_val = s.cache[id]
+		} else {
+			s.cache[id] = peer_val
 		}
 		value += peer_val
 	}
@@ -62,11 +65,9 @@ func (s *server) accept_add(msg maelstrom.Message) error {
 	var delta int = int(body["delta"].(float64))
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	value, err := s.kv.ReadInt(*s.ctx, s.n.ID())
-	if err != nil {
-		value = 0
-	}
+	value := s.cache[s.n.ID()]
 	s.kv.Write(*s.ctx, s.n.ID(), value + delta)
+	s.cache[s.n.ID()] = value + delta
 	delete(body, "delta")
 	return s.n.Reply(msg, body)
 }

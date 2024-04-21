@@ -39,7 +39,7 @@ func (s *server) handle_read(msg maelstrom.Message) error {
 	delete(body, "key")
 	delete(body, "msg")
 	body["type"] = "send_ok"
-	body["offset"] = len(s.logs[key])
+	body["offset"] = len(s.logs[key]) - 1
 	return s.n.Reply(msg, body)
 }
 
@@ -49,12 +49,12 @@ func (s *server) handle_poll(msg maelstrom.Message) error {
 		return err
 	}
 	var offsets = body["offsets"].(map[string]interface{})
-	var results map[string][]int = make(map[string][]int)
+	var results map[string][][]int = make(map[string][][]int)
 	for topic, offset := range(offsets) {
 		offset_inted := int(offset.(float64))
 		for idx, msg := range(s.logs[topic]) {
 			if idx >= offset_inted {
-				results[topic] = append(results[topic], msg)
+				results[topic] = append(results[topic], []int{msg, idx})
 			}
 		}
 	}

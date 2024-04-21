@@ -140,3 +140,18 @@ The challenge is to create a [Conflict-free replicated datatype](https://en.wiki
 Slightly better is to have a value in the KV for every node, and then the answer for a read message would simply be the sum of the KV-reads for every node. At this point, I also introduced a local cache for every node which keeps track of the values of other nodes (in the case a KV-read isn't successful due to network partitions). This actually succeeded most of the time for me, with about an 80% success rate for the given parameters. The remaining issue was still the slow convergence.
 
 The final improvement I made was to, instead of asking the KV for every node's value, ask the other nodes themselves for it. This improved my convergence to the point where my tests would pass 100% of the time (or at least it seems that way, based on 50 runs without any errors). 
+
+## 5: Kafka-style log
+This challenge, like challenge 3, consists of a series of sub-challenges that get increasingly harder. The idea is to create a replicated log service similar to Kafka (hence Kafka-style).
+
+### 5a: Single-node
+To get things started, we are asked simply be able to support all the commands that our nodes will be called with in future challenges, and it only needs to work for a single node.
+The commands are:
+```yaml
+send: Append a message (int) to a topic and respond with the offset for the message.
+poll: Return messages for a set of topics starting from some offsets
+commit_offsets: informs our node that messages have been successfully processed up to and including some offset
+list_committed_offsets: Return a map of committed offsets for a given set of topics
+```
+#### Solution
+Implementing this was basically just an exercise in following the instructions, as there is no real complexity with a single node. I did run into a mysterious error that had my goroutines spitting out cryptic messages to STDERR however. That error turned out to be a simple concurrent access problem, and was easily fixed with a mutex. 

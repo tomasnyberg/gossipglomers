@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"os"
@@ -11,7 +12,9 @@ import (
 
 func main() {
 	n := maelstrom.NewNode()
-	serv := server{n: n, logs: make(map[string][]int), read_to: make(map[string]int)}
+	kv := maelstrom.NewLinKV(n)
+	ctx := context.Background()
+	serv := server{n: n, logs: make(map[string][]int), read_to: make(map[string]int), kv: kv, ctx: &ctx}
 	f, _ := os.OpenFile("errlog", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 	log.SetOutput(f)
 	n.Handle("send", serv.handle_read)
@@ -27,7 +30,9 @@ type server struct {
 	n       *maelstrom.Node
 	logs    map[string][]int
 	read_to map[string]int
+	kv      *maelstrom.KV
 	mu      sync.Mutex
+	ctx     *context.Context
 }
 
 func (s *server) handle_read(msg maelstrom.Message) error {
@@ -39,7 +44,23 @@ func (s *server) handle_read(msg maelstrom.Message) error {
 	defer s.mu.Unlock()
 	val := int(body["msg"].(float64))
 	key := body["key"].(string)
-	s.logs[key] = append(s.logs[key], val)
+	var after []int = append(s.logs[key], val)
+	for true {
+		if err := s.kv.CompareAndSwap(*s.ctx, key, s.logs[key], after, true); err != nil {
+			var updated []int
+			new_err := s.kv.ReadInto(*s.ctx, key, &updated)
+			if new_err != nil {
+				log.Println("Warning: Could not read properly after failing to CAS")
+			} else {
+				s.logs[key] = updated
+				after = append(s.logs[key], val)
+			}
+		} else {
+			log.Println("Successfully CASed into the kv")
+			break
+		}
+	}
+	s.logs[key] = after
 	delete(body, "key")
 	delete(body, "msg")
 	body["type"] = "send_ok"

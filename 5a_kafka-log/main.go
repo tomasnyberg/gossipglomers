@@ -27,7 +27,7 @@ type server struct {
 	n       *maelstrom.Node
 	logs    map[string][]int
 	read_to map[string]int
-	mu sync.Mutex
+	mu      sync.Mutex
 }
 
 func (s *server) handle_read(msg maelstrom.Message) error {
@@ -56,9 +56,9 @@ func (s *server) handle_poll(msg maelstrom.Message) error {
 	defer s.mu.Unlock()
 	var offsets = body["offsets"].(map[string]interface{})
 	var results map[string][][]int = make(map[string][][]int)
-	for topic, offset := range(offsets) {
+	for topic, offset := range offsets {
 		offset_inted := int(offset.(float64))
-		for idx, msg := range(s.logs[topic]) {
+		for idx, msg := range s.logs[topic] {
 			// TODO might not want to send everything here in the future. Also, should binary search for the start.
 			if idx >= offset_inted {
 				results[topic] = append(results[topic], []int{idx, msg})
@@ -79,7 +79,7 @@ func (s *server) handle_commit_offsets(msg maelstrom.Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var offsets = body["offsets"].(map[string]interface{})
-	for topic, offset := range(offsets) {
+	for topic, offset := range offsets {
 		s.read_to[topic] = int(offset.(float64))
 	}
 	body["type"] = "commit_offsets_ok"
@@ -96,7 +96,7 @@ func (s *server) handle_list_committed_offsets(msg maelstrom.Message) error {
 	defer s.mu.Unlock()
 	keys := body["keys"].([]interface{})
 	results := make(map[string]int)
-	for _, key := range(keys) {
+	for _, key := range keys {
 		keystring := key.(string)
 		if _, ok := s.read_to[keystring]; !ok {
 			continue

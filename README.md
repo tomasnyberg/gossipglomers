@@ -149,7 +149,7 @@ To get things started, we are asked simply be able to support all the commands t
 The commands are:
 ```yaml
 send: Append a message (int) to a topic and respond with the offset for the message.
-poll: Return messages for a set of topics starting from some offsets
+poll: Return messages for a set of topics starting from some offset
 commit_offsets: informs our node that messages have been successfully processed up to and including some offset
 list_committed_offsets: Return a map of committed offsets for a given set of topics
 ```

@@ -154,4 +154,76 @@ commit_offsets: informs our node that messages have been successfully processed 
 list_committed_offsets: Return a map of committed offsets for a given set of topics
 ```
 #### Solution
-Implementing this was basically just an exercise in following the instructions, as there is no real complexity with a single node. I did run into a mysterious error that had my goroutines spitting out cryptic messages to STDERR however. That error turned out to be a simple concurrent access problem, and was easily fixed with a mutex. 
+Implementing this was basically just an exercise in following the instructions, as there is no real complexity with a single node. 
+I did run into a mysterious error that had my goroutines spitting out cryptic messages to STDERR however. That error turned out to be a simple concurrent access problem, and was easily fixed with a mutex. 
+In terms of offsets, I went with the very simple solution of having the offset be the message's 0-based index in the message list.
+The specification declares that you can go with any integers for the offset, so long as they are monotonically increasing.
+I still have no idea why you would want to do that (maybe if you implement the storing of the topics some other way?), and I did not run into any issue with my index-based solution.
+
+### 5b: Two nodes
+We now have two nodes, and the 5a solution will no longer work out of the box (two nodes might get a message for the same topic).
+The nodes will need to somehow communicate new messages to each other.
+
+#### Solution
+Luckily, we are provided with a [Linearizable](https://jepsen.io/consistency/models/linearizable) KV-store in which we can hold state. 
+This is similar to the sequentially-consistent KV-store from before, but linearizability provides a stronger consistency guarantee.
+I implemented a fairly naive solution where every topic (along with its messages) are stored as topic -> \[messages\] in the KV-store.
+Then, whenever a node receives a new message, they retry a CAS with that topic until it succeeds.
+On a `poll` operation, I also refresh the local cache of the message list if possible, to make sure we are sending the latest messages.
+This gave me the following results:
+```clojure
+:stats {:valid? true,
+         :count 16876,
+         :ok-count 16868,
+         :fail-count 0,
+         :info-count 8,
+         :by-f {:assign {:valid? true,
+                         :count 2144,
+                         :ok-count 2144,
+                         :fail-count 0,
+                         :info-count 0},
+                :crash {:valid? false,
+                        :count 8,
+                        :ok-count 0,
+                        :fail-count 0,
+                        :info-count 8},
+                :poll {:valid? true,
+                       :count 7642,
+                       :ok-count 7642,
+                       :fail-count 0,
+                       :info-count 0},
+                :send {:valid? true,
+                       :count 7082,
+                       :ok-count 7082,
+                       :fail-count 0,
+                       :info-count 0}}},
+ :availability {:valid? true, :ok-fraction 0.99952596},
+ :net {:all {:send-count 95128,
+             :recv-count 95128,
+             :msg-count 95128,
+             :msgs-per-op 5.636881},
+       :clients {:send-count 41714,
+                 :recv-count 41714,
+                 :msg-count 41714},
+       :servers {:send-count 53414,
+                 :recv-count 53414,
+                 :msg-count 53414,
+                 :msgs-per-op 3.1650865},
+       :valid? true},
+ :workload {:valid? true,
+            :worst-realtime-lag {:time 0.04213587,
+                                 :process 6,
+                                 :key "6",
+                                 :lag 0.0},
+            :bad-error-types (),
+            :error-types (),
+            :info-txn-causes ()},
+ :valid? true}
+
+
+Everything looks good! ヽ(‘ー`)ノ
+```
+I compared these results with what others were getting (on the fly.io forums) and they seem to line up fairly well. Unfortunately, it seems like it's very hard to measure any meaningful metrics beyond having "ok" numbers however.
+ With this very naive solution of just retrying CAS operations, sending my whole remaining message list on polls etc. I was already getting good-enough results. 
+The next challenge (5c) was supposed to be iterating on this solution to achieve better results. 
+Since I'm not sure what metric I want to optimize for (as all my metrics already look quite good), I decided to skip it.

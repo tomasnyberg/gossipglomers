@@ -49,6 +49,7 @@ func (s *server) handle_read(msg maelstrom.Message) error {
 		if err := s.kv.CompareAndSwap(*s.ctx, key, s.logs[key], after, true); err != nil {
 			var updated []int
 			new_err := s.kv.ReadInto(*s.ctx, key, &updated)
+			log.Println("Unsuccessful CAS")
 			if new_err != nil {
 				log.Println("Warning: Could not read properly after failing to CAS")
 			} else {
@@ -56,7 +57,7 @@ func (s *server) handle_read(msg maelstrom.Message) error {
 				after = append(s.logs[key], val)
 			}
 		} else {
-			log.Println("Successfully CASed into the kv")
+			log.Println("Successful CAS")
 			break
 		}
 	}

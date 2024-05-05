@@ -79,6 +79,11 @@ func (s *server) handle_poll(msg maelstrom.Message) error {
 	var results map[string][][]int = make(map[string][][]int)
 	for topic, offset := range offsets {
 		offset_inted := int(offset.(float64))
+		var updated []int
+		err := s.kv.ReadInto(*s.ctx, topic, &updated)
+		if err == nil {
+			s.logs[topic] = updated
+		}
 		for idx, msg := range s.logs[topic][offset_inted:] {
 			results[topic] = append(results[topic], []int{idx + offset_inted, msg})
 		}

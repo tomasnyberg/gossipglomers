@@ -52,7 +52,7 @@ func initBroadcast(n *maelstrom.Node, count int) broadcaster {
 							if err := json.Unmarshal(response_msg.Body, &response_body); err != nil {
 								return err
 							}
-							if response_body["type"].(string) == "peer_txn_ok" {
+							if response_body["type"].(string) == "txn_ok" {
 								success = true
 							} else {
 								ch <- msg
@@ -107,7 +107,9 @@ func (s *server) handle_txn(msg maelstrom.Message) error {
 			to_send = append(to_send, transaction)
 		}
 	}
-	s.add_to_broadcast(sent_from, to_send)
+	if(len(to_send) > 0){
+		s.add_to_broadcast(sent_from, to_send)
+	}
 	body["type"] = "txn_ok"
 	return s.n.Reply(msg, body)
 }

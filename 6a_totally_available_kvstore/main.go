@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
-	// "sync"
+	"sync"
 
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
@@ -23,6 +23,7 @@ func main() {
 type server struct {
 	n      *maelstrom.Node
 	values map[int]int
+	mu      sync.Mutex
 }
 
 func (s *server) handle_txn(msg maelstrom.Message) error {
@@ -32,13 +33,15 @@ func (s *server) handle_txn(msg maelstrom.Message) error {
 	}
 	var transactionlist []interface{}
 	transactionlist = body["txn"].([]interface{})
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for _, transaction_uncast := range transactionlist {
 		var transaction []interface{}
 		transaction = transaction_uncast.([]interface{})
 		var op string
 		var fr int
 		op, fr = transaction[0].(string), int(transaction[1].(float64))
-		// TODO make this a function. Also introduce a mutex
+		// TODO make this a function
 		if op == "r" {
 			value, ok := s.values[fr]
 			if !ok {

@@ -223,7 +223,15 @@ This gave me the following results:
 
 Everything looks good! ヽ(‘ー`)ノ
 ```
-I compared these results with what others were getting (on the fly.io forums) and they seem to line up fairly well. Unfortunately, it seems like it's very hard to measure any meaningful metrics beyond having "ok" numbers however.
+I compared these results with what others were getting (on the fly.io forums) and they seem to line up fairly well. Unfortunately, it seems like it's very hard to measure any meaningful metrics beyond having "ok" numbers.
  With this very naive solution of just retrying CAS operations, sending my whole remaining message list on polls etc. I was already getting good-enough results. 
 The next challenge (5c) was supposed to be iterating on this solution to achieve better results. 
 Since I'm not sure what metric I want to optimize for (as all my metrics already look quite good), I decided to skip it.
+## 6: Totally-available, read uncommitted transactions
+The final challenge we are presented with is to implement a KV-store which implements transaction. The goal is to support [weak consistency](https://en.wikipedia.org/wiki/Weak_consistency) while also being totally available. Once again, the challenge is split into multiple parts of gradually increasing difficulty.
+
+### 6a: Single-node
+The first challenge is simply to support the protocol, without needing to care about communication or consistency guarantees.
+#### Solution
+Maintaining a `map[int]int` on my node was sufficient to keep track of all the messages. A fairly straightforward challenge, but I did get some weird error messages that did not provide any hints as to what was wrong. Having learned from the previous single-node challenge, I quickly remembered that I can't allow concurrent access to said map. Introducing a simple mutex along with the map was enough to pass this first challenge.
+

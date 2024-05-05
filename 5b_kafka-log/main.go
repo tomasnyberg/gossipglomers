@@ -79,11 +79,8 @@ func (s *server) handle_poll(msg maelstrom.Message) error {
 	var results map[string][][]int = make(map[string][][]int)
 	for topic, offset := range offsets {
 		offset_inted := int(offset.(float64))
-		for idx, msg := range s.logs[topic] {
-			// TODO might not want to send everything here in the future. Also, should binary search for the start.
-			if idx >= offset_inted {
-				results[topic] = append(results[topic], []int{idx, msg})
-			}
+		for idx, msg := range s.logs[topic][offset_inted:] {
+			results[topic] = append(results[topic], []int{idx + offset_inted, msg})
 		}
 	}
 	body["type"] = "poll_ok"

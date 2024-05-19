@@ -75,6 +75,22 @@ func initBroadcast(n *maelstrom.Node, count int) broadcaster {
 	return broadcaster{ch}
 }
 
+func (s *server) handle_one_transaction(op string, fr int, transaction []interface{}, to_send [][]interface{}) {
+	if op == "r" {
+		value, ok := s.values[fr]
+		if !ok {
+			transaction[2] = s.values[fr]
+		} else {
+			transaction[2] = value
+		}
+	} else if op == "w" {
+		s.values[fr] = s.values[int(transaction[2].(float64))] // Note: what if s.values[to] doesn't exist?
+		to_send = append(to_send, transaction)
+	} else {
+		panic(fmt.Errorf("Invalid operation type: %s", op))
+	}
+}
+
 func (s *server) handle_txn(msg maelstrom.Message) error {
 	var body map[string]interface{}
 	if err := json.Unmarshal(msg.Body, &body); err != nil {
@@ -95,20 +111,7 @@ func (s *server) handle_txn(msg maelstrom.Message) error {
 		var op string
 		var fr int
 		op, fr = transaction[0].(string), int(transaction[1].(float64))
-		// TODO make this a function
-		if op == "r" {
-			value, ok := s.values[fr]
-			if !ok {
-				transaction[2] = s.values[fr]
-			} else {
-				transaction[2] = value
-			}
-		} else if op == "w" {
-			s.values[fr] = s.values[int(transaction[2].(float64))] // Note: what if s.values[to] doesn't exist?
-			to_send = append(to_send, transaction)
-		} else {
-			panic(fmt.Errorf("Invalid operation type: %s", op))
-		}
+		s.handle_one_transaction(op, fr, transaction, to_send)
 	}
 	if len(to_send) > 0 {
 		s.add_to_broadcast(sent_from, to_send)

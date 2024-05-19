@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -102,9 +103,11 @@ func (s *server) handle_txn(msg maelstrom.Message) error {
 			} else {
 				transaction[2] = value
 			}
-		} else {
+		} else if op == "w" {
 			s.values[fr] = s.values[int(transaction[2].(float64))] // Note: what if s.values[to] doesn't exist?
 			to_send = append(to_send, transaction)
+		} else {
+			panic(fmt.Errorf("Invalid operation type: %s", op))
 		}
 	}
 	if(len(to_send) > 0){

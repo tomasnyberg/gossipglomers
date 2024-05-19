@@ -2,8 +2,8 @@ package main
 
 import (
 	"encoding/json"
-	"log"
 	"fmt"
+	"log"
 	"os"
 	"sync"
 	"time"
@@ -13,7 +13,7 @@ import (
 
 func main() {
 	n := maelstrom.NewNode()
-	serv := server{n: n, values: make(map[int]int), bc:initBroadcast(n, 5)}
+	serv := server{n: n, values: make(map[int]int), bc: initBroadcast(n, 5)}
 	f, _ := os.OpenFile("errlog", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 	log.SetOutput(f)
 	n.Handle("txn", serv.handle_txn)
@@ -26,7 +26,7 @@ type server struct {
 	n      *maelstrom.Node
 	values map[int]int
 	mu     sync.Mutex
-	bc 	   broadcaster
+	bc     broadcaster
 }
 
 type broadcastMsg struct {
@@ -110,23 +110,23 @@ func (s *server) handle_txn(msg maelstrom.Message) error {
 			panic(fmt.Errorf("Invalid operation type: %s", op))
 		}
 	}
-	if(len(to_send) > 0){
+	if len(to_send) > 0 {
 		s.add_to_broadcast(sent_from, to_send)
 	}
 	body["type"] = "txn_ok"
 	return s.n.Reply(msg, body)
 }
 
-func (s *server) add_to_broadcast(sent_from string, to_send [][]interface{}){
+func (s *server) add_to_broadcast(sent_from string, to_send [][]interface{}) {
 	for _, nbr := range s.n.NodeIDs() {
 		if nbr == s.n.ID() || sent_from == nbr { // don't send messages back where they came from
-			continue;
+			continue
 		}
-		var bcmsg broadcastMsg;
+		var bcmsg broadcastMsg
 		bcmsg.peer = nbr
 		message_body := map[string]interface{}{
 			"type": "txn",
-			"txn": to_send,
+			"txn":  to_send,
 			"from": s.n.ID(),
 		}
 		byte_body, err := json.Marshal(message_body)
